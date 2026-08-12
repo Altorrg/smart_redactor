@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>PDF Smart Redactor GUI</title>
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Local document utility</p>
+        <h1>PDF Smart Redactor</h1>
+      </div>
+      <span class="local-badge">Offline</span>
+    </header>
+
+    <section class="controls" aria-labelledby="source-heading">
+      <h2 id="source-heading">Source PDF</h2>
+      <div class="file-row">
+        <label class="file-field" for="pdf-file">
+          <span class="file-label">PDF file</span>
+          <input id="pdf-file" type="file" accept="application/pdf,.pdf">
+        </label>
+        <button id="browse-button" class="button button-secondary" type="button">
+          Desktop Browse
+        </button>
+        <button id="analyze-button" class="button button-primary" type="button" disabled>
+          Analyze
+        </button>
+      </div>
+      <p id="selected-file" class="selected-file" aria-live="polite">No file selected</p>
+    </section>
+
+    <section class="results" aria-labelledby="results-heading">
+      <div class="section-heading">
+        <div>
+          <h2 id="results-heading">Detected entities</h2>
+          <p id="results-summary">Analyze a PDF to review possible sensitive content.</p>
+        </div>
+        <button id="redact-button" class="button button-danger" type="button" disabled>
+          Redact Selected
+        </button>
+      </div>
+
+      <div id="entity-list" class="entity-list" aria-live="polite">
+        <p class="empty-state">No analysis results yet.</p>
+      </div>
+    </section>
+
+    <section class="status-panel" aria-labelledby="status-heading">
+      <h2 id="status-heading">Status</h2>
+      <p id="status-message" class="status-message" role="status" aria-live="polite">
+        Ready. Processing remains on this computer.
+      </p>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span>PDF Smart Redactor GUI</span>
+    <button id="license-button" class="text-button" type="button">Third-party licenses</button>
+  </footer>
+
+  <dialog id="license-dialog" class="license-dialog" aria-labelledby="license-title">
+    <div class="dialog-header">
+      <h2 id="license-title">Third-party licenses</h2>
+      <button id="license-close" class="icon-button" type="button" aria-label="Close license information">
+        &times;
+      </button>
+    </div>
+    <div class="license-content">
+      <p>This application uses the following locally installed open-source software:</p>
+      <ul>
+        <li>PyMuPDF: GNU AGPL 3.0 or commercial MuPDF license</li>
+        <li>Tesseract OCR: Apache License 2.0</li>
+        <li>pytesseract: Apache License 2.0</li>
+        <li>pdf2image: MIT License</li>
+        <li>Pillow: HPND License</li>
+        <li>Eel: MIT License</li>
+      </ul>
+      <p>Complete attribution requirements are documented in <code>DEPENDENCY_LICENSES.md</code>.</p>
+    </div>
+  </dialog>
+
+  <script src="/eel.js"></script>
+  <script src="main.js?v=2"></script>
+</body>
+</html>

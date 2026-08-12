@@ -1,0 +1,397 @@
+:root {
+  color: #202522;
+  background: #f3f5f3;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-synthesis: none;
+  line-height: 1.5;
+  --surface: #ffffff;
+  --border: #d7ddd9;
+  --muted: #68716b;
+  --accent: #176b45;
+  --accent-hover: #115438;
+  --danger: #a53333;
+  --danger-hover: #842727;
+  --focus: #2478c5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background: #f3f5f3;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid rgba(36, 120, 197, 0.28);
+  outline-offset: 2px;
+}
+
+.app-shell {
+  width: min(920px, calc(100% - 32px));
+  margin: 32px auto 20px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.app-header,
+.controls,
+.results,
+.status-panel {
+  padding: 24px 28px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.eyebrow {
+  margin: 0 0 2px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: clamp(1.45rem, 4vw, 2rem);
+  line-height: 1.2;
+}
+
+h2 {
+  margin-bottom: 14px;
+  font-size: 1rem;
+}
+
+.local-badge {
+  flex: 0 0 auto;
+  padding: 4px 9px;
+  color: #145236;
+  background: #e5f3eb;
+  border: 1px solid #b9dac7;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.controls,
+.results {
+  border-bottom: 1px solid var(--border);
+}
+
+.file-row,
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.file-field {
+  display: grid;
+  flex: 1;
+  gap: 7px;
+}
+
+.file-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+input[type="file"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 7px;
+  color: #343b37;
+  background: #ffffff;
+  border: 1px solid #bcc6bf;
+  border-radius: 6px;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 7px 12px;
+  color: #27302b;
+  background: #edf0ee;
+  border: 1px solid #c8d0cb;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.selected-file,
+.section-heading p,
+.empty-state,
+.status-message {
+  color: var(--muted);
+}
+
+.selected-file {
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+}
+
+.button {
+  min-height: 42px;
+  padding: 9px 16px;
+  color: #ffffff;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.button-primary {
+  background: var(--accent);
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.button-secondary {
+  color: #27302b;
+  background: #e7ebe8;
+  border: 1px solid #c5cec8;
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: #dce2de;
+}
+
+.button-danger {
+  background: var(--danger);
+}
+
+.button-danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+.button:disabled {
+  color: #7c8580;
+  background: #e2e6e3;
+  cursor: not-allowed;
+}
+
+.section-heading {
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-heading h2 {
+  margin-bottom: 3px;
+}
+
+.section-heading p {
+  margin-bottom: 0;
+  font-size: 0.9rem;
+}
+
+.entity-list {
+  min-height: 80px;
+  max-height: 330px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.entity-item {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 9px 12px;
+  border-bottom: 1px solid #e4e8e5;
+  cursor: pointer;
+}
+
+.entity-item:last-child {
+  border-bottom: 0;
+}
+
+.entity-item:hover {
+  background: #f7f9f7;
+}
+
+.entity-item input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--danger);
+}
+
+.entity-text {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.entity-meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.empty-state {
+  margin: 0;
+  padding: 26px 16px;
+  text-align: center;
+}
+
+.status-panel h2 {
+  margin-bottom: 6px;
+}
+
+.status-message {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.status-message[data-state="busy"] {
+  color: #7a5a13;
+}
+
+.status-message[data-state="success"] {
+  color: #176b45;
+}
+
+.status-message[data-state="error"] {
+  color: var(--danger);
+}
+
+.app-footer {
+  width: min(920px, calc(100% - 32px));
+  margin: 0 auto 28px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.text-button {
+  padding: 0;
+  color: #315d83;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.license-dialog {
+  width: min(620px, calc(100% - 32px));
+  padding: 0;
+  color: #202522;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 18px 48px rgba(25, 34, 29, 0.24);
+}
+
+.license-dialog::backdrop {
+  background: rgba(20, 25, 22, 0.52);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dialog-header h2 {
+  margin: 0;
+}
+
+.icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #3f4742;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 1.65rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: #edf0ee;
+}
+
+.license-content {
+  padding: 20px;
+}
+
+.license-content p:last-child {
+  margin-bottom: 0;
+}
+
+.license-content li {
+  margin: 7px 0;
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    width: 100%;
+    margin: 0;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .app-header,
+  .controls,
+  .results,
+  .status-panel {
+    padding: 20px;
+  }
+
+  .file-row,
+  .section-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .button {
+    width: 100%;
+  }
+
+  .entity-item {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .entity-meta {
+    grid-column: 2;
+  }
+
+  .app-footer {
+    width: calc(100% - 32px);
+    flex-direction: column;
+  }
+}
