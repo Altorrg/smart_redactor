@@ -6,13 +6,14 @@ import gc
 import os
 import re
 import shutil
+import subprocess
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Literal, Sequence
 
-import fitz
+import pymupdf as fitz
 import pytesseract
-from pdf2image import convert_from_path, pdfinfo_from_path
 from PIL import Image, ImageDraw
 from pytesseract import Output
 
@@ -27,6 +28,8 @@ OCR_TIMEOUT_SECONDS = 120
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_TESSERACT_PATH: Path | None = None
 LOCAL_POPPLER_PATH: Path | None = None
+OCR_LANGUAGE = os.environ.get("PDF_REDACTOR_OCR_LANG", "hun+eng")
+OCR_CONFIG = ""
 Image.MAX_IMAGE_PIXELS = 60_000_000
 
 
@@ -44,10 +47,11 @@ def _candidate_paths(environment_name: str, defaults: Sequence[Path]) -> list[Pa
 def configure_ocr_runtime() -> dict[str, object]:
     """Locate project-local OCR tools and configure their absolute paths."""
 
-    global LOCAL_TESSERACT_PATH, LOCAL_POPPLER_PATH
+    global LOCAL_TESSERACT_PATH, LOCAL_POPPLER_PATH, OCR_CONFIG
 
     tesseract_defaults = [
         PROJECT_ROOT / "tools" / "tesseract" / "tesseract.exe",
+        Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "PDF24" / "tesseract" / "tesseract.exe",
     ]
     for environment_name in ("ProgramFiles", "ProgramFiles(x86)", "LOCALAPPDATA"):
         base_directory = os.environ.get(environment_name, "").strip()
@@ -76,6 +80,14 @@ def configure_ocr_runtime() -> dict[str, object]:
     tesseract_command = shutil.which("tesseract")
     if LOCAL_TESSERACT_PATH is not None:
         pytesseract.pytesseract.tesseract_cmd = str(LOCAL_TESSERACT_PATH)
+    tessdata = os.environ.get("PDF_REDACTOR_TESSDATA_PATH", "").strip()
+    if not tessdata and (PROJECT_ROOT / "tools" / "tessdata").is_dir():
+        tessdata = str(PROJECT_ROOT / "tools" / "tessdata")
+    # Windows shlex in pytesseract can preserve literal quotes in --tessdata-dir.
+    # Use Tesseract's documented per-process environment setting instead.
+    OCR_CONFIG = ""
+    if tessdata:
+        os.environ["TESSDATA_PREFIX"] = str(Path(tessdata).resolve())
 
     poppler_defaults = [
         PROJECT_ROOT / "tools" / "poppler" / "Library" / "bin",
@@ -99,14 +111,30 @@ def configure_ocr_runtime() -> dict[str, object]:
     missing_tools: list[str] = []
     if LOCAL_TESSERACT_PATH is None and not tesseract_command:
         missing_tools.append("tools/tesseract/tesseract.exe")
-    if LOCAL_POPPLER_PATH is None and not poppler_on_path:
-        missing_tools.append("tools/poppler")
+    # Rendering uses the already required PyMuPDF: no separate Poppler install.
+    languages: list[str] = []
+    if LOCAL_TESSERACT_PATH is not None or tesseract_command:
+        try:
+            command = [pytesseract.pytesseract.tesseract_cmd, "--list-langs"]
+            if tessdata:
+                command.extend(["--tessdata-dir", str(Path(tessdata).resolve())])
+            listed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                timeout=10, check=True, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+            # Some Windows builds print the path header in the ANSI code page.
+            # Language identifiers are ASCII; never fail startup decoding that header.
+            languages = [line.strip() for line in listed.stdout.decode("utf-8", errors="replace").splitlines()
+                if re.fullmatch(r"[A-Za-z0-9_/]+", line.strip())]
+            missing_tools.extend(f"OCR language: {lang}" for lang in OCR_LANGUAGE.split("+") if lang not in languages)
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            missing_tools.append("working Tesseract language data")
 
     return {
         "ready": not missing_tools,
         "missing_tools": missing_tools,
         "tesseract_path": str(LOCAL_TESSERACT_PATH or tesseract_command or ""),
         "poppler_path": str(LOCAL_POPPLER_PATH or ("PATH" if poppler_on_path else "")),
+        "ocr_language": OCR_LANGUAGE,
+        "available_languages": languages,
     }
 
 
@@ -131,14 +159,14 @@ def _prepare_entities(approved_entities: Sequence[str]) -> tuple[str, ...]:
 
 
 def _get_page_count(pdf_path: Path) -> int:
-    """Return a bounded page count using the Poppler metadata utility."""
+    """Return a bounded page count using the existing PDF engine."""
 
-    information = pdfinfo_from_path(
-        str(pdf_path),
-        poppler_path=_poppler_path_argument(),
-        timeout=PDFINFO_TIMEOUT_SECONDS,
-    )
-    page_count = int(information.get("Pages", 0))
+    with fitz.open(pdf_path) as document:
+        if document.needs_pass:
+            raise ValueError("Password-protected PDFs are not supported.")
+        if document.is_form_pdf:
+            raise ValueError("Interactive PDF forms require a reviewed flattened copy first.")
+        page_count = document.page_count
     if page_count < 1:
         raise ValueError("The PDF does not contain any pages.")
     if page_count > MAX_OCR_PAGES:
@@ -162,17 +190,20 @@ def is_native_text_pdf(pdf_path: Path) -> bool:
     with fitz.open(pdf_path) as document:
         if document.needs_pass:
             raise ValueError("Password-protected PDFs are not supported.")
+        if document.is_form_pdf:
+            raise ValueError("Interactive PDF forms require a reviewed flattened copy first.")
         if document.page_count < 1:
             raise ValueError("The PDF does not contain any pages.")
 
         for page in document:
+            # A searchable heading or hidden OCR layer does not prove that image text
+            # is covered. Any raster content takes the conservative OCR/raster route.
+            if page.get_images(full=True):
+                return False
             text = page.get_text("text").strip()
             if text:
                 found_text = True
                 continue
-            if page.get_images(full=True):
-                return False
-
     return found_text
 
 
@@ -183,32 +214,13 @@ def _render_single_page(
 ) -> tuple[Image.Image, Path]:
     """Render one bounded-size PDF page and return its loaded Pillow image."""
 
-    rendered_paths = convert_from_path(
-        str(pdf_path),
-        dpi=OCR_DPI,
-        first_page=page_number,
-        last_page=page_number,
-        fmt="png",
-        output_folder=str(output_directory),
-        paths_only=True,
-        thread_count=1,
-        size=MAX_RENDER_DIMENSION,
-        poppler_path=_poppler_path_argument(),
-        timeout=PAGE_RENDER_TIMEOUT_SECONDS,
-    )
-    if len(rendered_paths) != 1:
-        raise RuntimeError(f"Unable to render PDF page {page_number}.")
-
-    rendered_path = Path(rendered_paths[0]).resolve()
-    source_image = Image.open(rendered_path)
-    source_image.load()
-
-    if source_image.mode == "RGB":
-        return source_image, rendered_path
-
-    rgb_image = source_image.convert("RGB")
-    source_image.close()
-    return rgb_image, rendered_path
+    rendered_path = output_directory / f"source-page-{page_number:05d}.png"
+    with fitz.open(pdf_path) as document:
+        page = document[page_number - 1]
+        scale = MAX_RENDER_DIMENSION / max(page.rect.width, page.rect.height)
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, alpha=False)
+        image = Image.frombytes("RGB", (pixmap.width, pixmap.height), pixmap.samples)
+    return image, rendered_path
 
 
 def _extract_native_text(pdf_path: Path) -> str:
@@ -247,6 +259,8 @@ def _extract_ocr_text(pdf_path: Path) -> str:
                 )
                 extracted = pytesseract.image_to_string(
                     image,
+                    lang=OCR_LANGUAGE,
+                    config=OCR_CONFIG,
                     timeout=OCR_TIMEOUT_SECONDS,
                 )
                 character_count += len(extracted)
@@ -293,14 +307,20 @@ def redact_native_pdf(
         raise ValueError("At least one approved entity is required.")
 
     annotation_count = 0
+    found: set[str] = set()
     with fitz.open(input_path) as document:
         if document.needs_pass:
             raise ValueError("Password-protected PDFs are not supported.")
+        if document.is_form_pdf:
+            raise ValueError("Interactive PDF forms require a reviewed flattened copy first.")
 
         for page in document:
             page_annotation_count = 0
             for entity in entities:
-                for rectangle in page.search_for(entity):
+                rectangles = _native_entity_rectangles(page, entity)
+                if rectangles:
+                    found.add(_entity_key(entity))
+                for rectangle in rectangles:
                     page.add_redact_annot(rectangle, fill=(0.0, 0.0, 0.0))
                     page_annotation_count += 1
 
@@ -308,6 +328,18 @@ def redact_native_pdf(
                 page.apply_redactions()
                 annotation_count += page_annotation_count
 
+            # scrub(reset_responses=True) clears annotation replies, not the
+            # original note/free-text content. Remove annotations explicitly:
+            # otherwise approved text can survive outside extracted page text.
+            for annotation in list(page.annots() or []):
+                page.delete_annot(annotation)
+
+        _require_all_entities(entities, found)
+        # Do not retain metadata, comments, attachments, hidden text or JavaScript
+        # that could still carry the approved values. Visible forms are refused.
+        document.scrub()
+        document.set_toc([])
+        _verify_native_text_removed(document, entities)
         document.save(
             output_path,
             garbage=4,
@@ -321,7 +353,80 @@ def redact_native_pdf(
 def _normalize_ocr_token(value: str) -> str:
     """Normalize OCR text for punctuation-tolerant entity matching."""
 
-    return re.sub(r"[^0-9a-z]+", "", value.casefold())
+    value = unicodedata.normalize("NFKC", value).casefold().replace("−", "-").replace("’", "'")
+    value = "".join(c for c in value if c.isalnum() or c in ",.+-'$€£&")
+    return re.sub(r"(?<!\d)[,.]|[,.](?!\d)", "", value)
+
+
+def _entity_key(entity: str) -> str:
+    return " ".join(part for word in entity.split() if (part := _normalize_ocr_token(word)))
+
+
+def _require_all_entities(entities: Sequence[str], found: set[str]) -> None:
+    missing = [entity for entity in entities if _entity_key(entity) not in found]
+    if missing:
+        raise ValueError("Export stopped: some approved values were not located. Review the selection or OCR. Missing: " + "; ".join(missing))
+
+
+def _verify_native_text_removed(document: fitz.Document, entities: Sequence[str]) -> None:
+    """Check extracted text independently of word-box matching before saving.
+
+    Ambiguous layout can leave a repeated value behind even when another
+    occurrence was found. Refuse that export instead of treating one match as
+    evidence that every occurrence was removed. This is not an OCR guarantee.
+    """
+    keys = [(entity, _entity_key(entity)) for entity in entities]
+    for page in document:
+        text = re.sub(r"(?<=\w)-[ \t]*\r?\n[ \t]*(?=\w)", "", page.get_text("text"))
+        normalized = _entity_key(text)
+        remaining = [entity for entity, key in keys if key and
+            re.search(r"(?<!\S)" + re.escape(key) + r"(?!\S)", normalized)]
+        if remaining:
+            raise ValueError("Export stopped: approved text remains after redaction. Review this page or use a reviewed raster copy. Remaining: " + "; ".join(remaining))
+
+
+def _native_entity_rectangles(page: fitz.Page, entity: str) -> list[fitz.Rect]:
+    """Unicode casefold and whole-word matching; never redact Anna inside Annabelle."""
+    tokens = [{"normalized": _entity_key(w[4]), "box": (w[0], w[1], w[2]-w[0], w[3]-w[1]), "line": w[5:7]}
+        for w in page.get_text("words", sort=True) if _entity_key(w[4])]
+    boxes = _matching_boxes(tokens, ((_entity_key(entity), min(max(len(entity.split())+4, 6), 64)),))
+    return [fitz.Rect(x, y, x+w, y+h) for x, y, w, h in boxes]
+
+
+def _continues_text(previous: dict, current: dict) -> bool:
+    x, y, w, h = previous["box"]; nx, ny, nw, nh = current["box"]
+    if previous["line"] == current["line"]:
+        return nx - (x+w) <= 3 * max(h, nh)
+    return (previous["line"][:-1] == current["line"][:-1]
+        and current["line"][-1] == previous["line"][-1]+1 and 0 < ny-y <= 2.5*max(h, nh))
+
+
+def _matching_boxes(tokens: Sequence[dict], targets: Sequence[tuple[str, int]], matched: set[str] | None = None) -> set:
+    boxes: set = set()
+    for target, maximum_span in targets:
+        for start in range(len(tokens)):
+            candidates = {""}
+            for end in range(start, min(len(tokens), start+maximum_span)):
+                token = tokens[end]
+                if end > start and not _continues_text(tokens[end-1], token):
+                    break
+                wrapped = end > start and tokens[end-1]["line"] != token["line"]
+                next_candidates = set()
+                for candidate in candidates:
+                    next_candidates.add(candidate + (" " if candidate else "") + token["normalized"])
+                    if wrapped and candidate.endswith("-") and len(candidate)>1 and candidate[-2].isalpha():
+                        next_candidates.add(candidate + token["normalized"])
+                        next_candidates.add(candidate[:-1] + token["normalized"])
+                candidates = {c for c in next_candidates if target.startswith(c) or
+                    (c.endswith("-") and len(c)>1 and c[-2].isalpha() and target.startswith(c[:-1]))}
+                if target in candidates:
+                    boxes.update(t["box"] for t in tokens[start:end+1])
+                    if matched is not None:
+                        matched.add(target)
+                    break
+                if not candidates:
+                    break
+    return boxes
 
 
 def _build_ocr_targets(entities: Sequence[str]) -> tuple[tuple[str, int], ...]:
@@ -329,17 +434,18 @@ def _build_ocr_targets(entities: Sequence[str]) -> tuple[tuple[str, int], ...]:
 
     targets: list[tuple[str, int]] = []
     for entity in entities:
-        compact = _normalize_ocr_token(entity)
+        compact = _entity_key(entity)
         if not compact:
             continue
         word_count = len(re.findall(r"\S+", entity))
-        targets.append((compact, min(max(word_count + 2, 3), 8)))
+        targets.append((compact, min(max(word_count + 2, 3), 64)))
     return tuple(targets)
 
 
 def _find_ocr_redaction_boxes(
     ocr_data: dict[str, list[object]],
     targets: Sequence[tuple[str, int]],
+    matched_targets: set[str] | None = None,
 ) -> set[tuple[int, int, int, int]]:
     """Find exact OCR word boxes whose contiguous text matches an entity."""
 
@@ -347,7 +453,7 @@ def _find_ocr_redaction_boxes(
     text_values = ocr_data.get("text", [])
 
     for index, raw_text in enumerate(text_values):
-        normalized = _normalize_ocr_token(str(raw_text))
+        normalized = _entity_key(str(raw_text))
         if not normalized:
             continue
 
@@ -376,27 +482,7 @@ def _find_ocr_redaction_boxes(
             }
         )
 
-    boxes: set[tuple[int, int, int, int]] = set()
-    for target, maximum_span in targets:
-        for start_index, start_token in enumerate(tokens):
-            candidate = ""
-            start_line = start_token["line"]
-            upper_bound = min(len(tokens), start_index + maximum_span)
-
-            for token_index in range(start_index, upper_bound):
-                token = tokens[token_index]
-                if token["line"] != start_line:
-                    break
-                candidate += str(token["normalized"])
-
-                if candidate == target:
-                    for matched_index in range(start_index, token_index + 1):
-                        boxes.add(tokens[matched_index]["box"])  # type: ignore[arg-type]
-                    break
-                if len(candidate) >= len(target):
-                    break
-
-    return boxes
+    return _matching_boxes(tokens, targets, matched_targets)
 
 
 def _write_image_page_as_pdf(
@@ -455,6 +541,7 @@ def redact_scanned_pdf(
     if len(page_dimensions) != page_count:
         raise RuntimeError("PDF page metadata is inconsistent.")
     rectangle_count = 0
+    found: set[str] = set()
 
     with tempfile.TemporaryDirectory(prefix="pdf-smart-redactor-pages-") as temporary_name:
         temporary_directory = Path(temporary_name)
@@ -474,15 +561,17 @@ def redact_scanned_pdf(
                 )
                 ocr_data = pytesseract.image_to_data(
                     image,
+                    lang=OCR_LANGUAGE,
+                    config=OCR_CONFIG,
                     output_type=Output.DICT,
                     timeout=OCR_TIMEOUT_SECONDS,
                 )
-                boxes = _find_ocr_redaction_boxes(ocr_data, targets)
+                boxes = _find_ocr_redaction_boxes(ocr_data, targets, found)
                 drawing_context = ImageDraw.Draw(image)
 
                 for left, top, width, height in boxes:
                     drawing_context.rectangle(
-                        (left, top, left + width, top + height),
+                        (max(0, left - 2), max(0, top - 2), left + width + 2, top + height + 2),
                         fill="#000000",
                     )
 
@@ -510,6 +599,7 @@ def redact_scanned_pdf(
                 del image
                 gc.collect()
 
+        _require_all_entities(entities, found)
         output_document = fitz.open()
         try:
             for page_pdf_path in page_pdf_paths:
@@ -526,3 +616,4 @@ def redact_scanned_pdf(
             gc.collect()
 
     return rectangle_count
+
