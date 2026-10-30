@@ -1,0 +1,68 @@
+SMART REDACTOR – JAVÍTOTT, KIPRÓBÁLT VÁLTOZAT
+2026-10-30
+
+Állapot: szöveges, szkennelt és vegyes PDF-en kipróbált, kézi jóváhagyásos
+kitakaró segédként használható. A felismerés heurisztikus, ezért az exportált
+PDF minden oldalát ellenőrizni kell. Teljes anonimizálási garanciát nem ad.
+
+JAVÍTÁSOK
+- A magyar ékezetes neveket, cégeket és településeket is felkínálja.
+- Címkézett névmezők, névelőtagok és monogramok, számot/kötőszót tartalmazó cégek javítva.
+- Előjeles összegek, egy tizedesjegy, pénznemjelek és nem törhető szóközök kezelése javítva.
+- A jóváhagyott név ékezetes nagybetűs változatát is eltávolítja.
+- A szóhatárokat megőrzi: Anna Maria nem azonos AnnaMaria szöveggel.
+- A közeli sortöréseket és sorvégi elválasztásokat követi; külön oszlopokat nem köt össze.
+- Az OCR hun+eng nyelvet használ, a Windowsos szóközös/ékezetes útvonalhiba javítva.
+- A vegyes PDF képi része is OCR-t kap; külön Poppler-telepítés már nem szükséges.
+- Semmi nincs automatikusan kijelölve. Csak a kézzel jóváhagyott lista kerül kitakarásra.
+- Ha egy jóváhagyott értéket nem talál, az export megáll; nincs félkész sikerjelzés.
+- Natív exportnál külön szövegvisszaolvasás állítja meg a mentést, ha jóváhagyott adat marad.
+- A felismerő által kihagyott pontos szöveg kézzel felvehető a felületen, elemzés után.
+  Az új sor nincs előre kijelölve, a korábbi kijelölések megmaradnak.
+- Megváltozott forrás új elemzést igényel. Az eredeti és a korábbi exportok megmaradnak.
+- A natív exportból a metaadatok és beágyazott mellékletek is törlődnek.
+- A PDF-megjegyzések, szabad szöveges annotációk és annotációs mellékletek is
+  törlődnek: a korábbi tisztítás egy eredeti megjegyzésben adatot hagyhatott.
+
+BIZONYÍTOTT PRÓBÁK
+76 Python-teszt sikeres. A Windowsos index.bat indító, a valódi Eel HTTP és
+WebSocket kapcsolat, az elemzés és az export is végrehajtva.
+17 további frontend-állítás sikeres a tényleges main.js-en, helyettesített DOM-mal.
+Az új mintakészlet 16 név/cég/cím esetet és 20 összegformátumot tartalmaz;
+ezek háromoldalas PDF-ben is végigmentek az elemzésen és a tényleges kitakaráson.
+Külön magyar szkennelt mintairat, ismétlődés, sortörés, elválasztás, forgatott
+natív oldal és kézi szövegfelvétel próbája is sikeres. Ezek saját tesztesetek,
+nem általános felismerési pontosságot mérő eredmények.
+Valódi Tesseract 5.4.1, hun+eng modellek; nem szimulált OCR.
+A minták kitakart képpontjai a PDF saját egyetlen beágyazott képében feketék;
+a jóváhagyott adatok visszaolvasással/OCR-rel nem kerültek elő. A nem kijelölt
+ellenőrző sor olvasható maradt. A képi eredményeket külön megvizsgáltam.
+Csak saját, mesterséges tesztadatok szerepelnek. Bizalmas iratot nem használtam.
+
+INDÍTÁS
+A GitHubról letölthető változat forráscsomag. Python 3.10+ és a projekt
+függőségei szükségesek: install_dependencies.bat, majd index.bat.
+OCR-hez Tesseract kell; a meglévő PDF24/Tesseract telepítést is felismeri.
+A GitHub forráscsomaghoz a magyar és angol OCR-modelleket külön kell beszerezni
+a hivatalos tesseract-ocr/tessdata_fast repóból; helyük tools/tessdata.
+A program nem telepít vagy tölt le semmit az indításakor.
+
+KORLÁTOK
+Az OCR és a névfelismerés téveszthet vagy kihagyhat értékeket. Kézírásra,
+rossz minőségű vagy bonyolult elrendezésű oldalakra nincs felismerési garancia.
+A natív visszaolvasás sem bizonyítja a hibásan kódolt vagy képi szöveg teljes
+eltávolítását. Elforgatott szkennelt oldal előzetes kézi forgatást igényelhet.
+Képet tartalmazó PDF-nél a teljes export képalapú lesz: kereshető szöveg és
+interaktív funkciók nem maradnak meg. Kis logó is ezt az ágat választhatja.
+Jelszavas és interaktív űrlapos PDF-et visszautasít. Az eredeti megmarad.
+Nem licenc-, jogi vagy általános adatvédelmi megfelelőségi tanúsítás.
+Három, külső Eel/pyparsing függőségből származó elavulási figyelmeztetés maradt;
+a teszteket és működést nem akadályozták.
+
+FORRÁS ÉS ÁTADÁS
+Kiinduló repó: Altorrg/smart_redactor, main
+Kiinduló commit: d47b41fee873215cf2db2d50f491f064d573a11e
+A javítás és a független ellenőrzés helyben készült. A nyilvános kiadás
+forrása: src/ és web/; reprodukálható mesterséges próbák: tests/.
+Az október 30-i ellenőrzés leírása: docs/VALIDATION_20261030.md.
+A program forrásként használható, nem önálló EXE és nem tanúsított anonimizáló.
