@@ -11,6 +11,8 @@ const statusMessage = document.getElementById("status-message");
 const licenseButton = document.getElementById("license-button");
 const licenseDialog = document.getElementById("license-dialog");
 const licenseClose = document.getElementById("license-close");
+const customEntityInput = document.getElementById("custom-entity");
+const addEntityButton = document.getElementById("add-entity-button");
 const eelBridge = typeof window.eel === "object" ? window.eel : null;
 
 const state = {
@@ -19,6 +21,7 @@ const state = {
   busy: false,
   backendAvailable: eelBridge !== null,
   runtimeReady: false,
+  analysisReady: false,
 };
 
 function setStatus(message, status = "idle") {
@@ -31,6 +34,9 @@ function setBusy(isBusy) {
   pdfFileInput.disabled = isBusy;
   browseButton.disabled = isBusy || !state.backendAvailable;
   analyzeButton.disabled = isBusy || !state.filePath || !state.runtimeReady;
+  customEntityInput.disabled = isBusy || !state.analysisReady;
+  addEntityButton.disabled = isBusy || !state.analysisReady;
+  entityList.querySelectorAll("input[type='checkbox']").forEach((checkbox) => { checkbox.disabled = isBusy; });
   updateRedactButton();
 }
 
@@ -94,7 +100,7 @@ function renderEntities(entities) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = entity.text;
-    checkbox.checked = true;
+    checkbox.checked = false;
     checkbox.id = `entity-${index}`;
     checkbox.addEventListener("change", updateRedactButton);
 
@@ -104,9 +110,11 @@ function renderEntities(entities) {
 
     const metadata = document.createElement("span");
     metadata.className = "entity-meta";
-    const category = entity.category === "amount" ? "Amount" : "Potential name or city";
+    const category = entity.category === "amount" ? "Amount" : "Potential person, company or city";
     const occurrences = Number.isInteger(entity.occurrences) ? entity.occurrences : 1;
-    metadata.textContent = `${category} · ${occurrences} occurrence${occurrences === 1 ? "" : "s"}`;
+    metadata.textContent = entity.category === "custom"
+      ? "Added manually · locations checked during export"
+      : `${category} · ${occurrences} occurrence${occurrences === 1 ? "" : "s"}`;
 
     label.append(checkbox, text, metadata);
     entityList.appendChild(label);
@@ -119,8 +127,11 @@ function renderEntities(entities) {
 function handleBrowserFileSelection() {
   const file = pdfFileInput.files && pdfFileInput.files[0];
   state.filePath = getLocalFilePath(file);
+  state.analysisReady = false;
+  customEntityInput.value = "";
   state.entities = [];
   renderEntities([]);
+  setBusy(false);
 
   if (!file) {
     selectedFileLabel.textContent = "No file selected";
@@ -164,6 +175,8 @@ async function choosePdf() {
     }
 
     state.filePath = selectedPath;
+    state.analysisReady = false;
+    customEntityInput.value = "";
     state.entities = [];
     renderEntities([]);
     selectedFileLabel.textContent = selectedPath.split(/[\\/]/).pop() || selectedPath;
@@ -194,6 +207,7 @@ analyzeButton.addEventListener("click", async () => {
   }
 
   setBusy(true);
+  state.analysisReady = false;
   setStatus("Analyzing the PDF locally. Scanned pages may take several minutes.", "busy");
 
   try {
@@ -202,8 +216,9 @@ analyzeButton.addEventListener("click", async () => {
       throw new Error("The analysis service returned an invalid response.");
     }
     state.entities = result;
+    state.analysisReady = true;
     renderEntities(state.entities);
-    setStatus("Analysis complete. Review the selected entities before redaction.", "success");
+    setStatus("Analysis complete. Select only the values you approve for permanent redaction. Detection is not a completeness guarantee.", "success");
   } catch (error) {
     state.entities = [];
     renderEntities([]);
@@ -211,6 +226,31 @@ analyzeButton.addEventListener("click", async () => {
   } finally {
     setBusy(false);
   }
+});
+
+function addCustomEntity() {
+  if (state.busy || !state.analysisReady) return;
+  const value = customEntityInput.value.normalize("NFC").trim().replace(/\s+/g, " ");
+  if (!value || value.length > 256) {
+    setStatus("Enter between 1 and 256 characters from the PDF.", "error");
+    return;
+  }
+  if (state.entities.some((entity) => entity.text.normalize("NFC").toLowerCase() === value.toLowerCase())) {
+    setStatus("This value is already in the review list.", "error");
+    return;
+  }
+  const previouslyChecked = new Set(Array.from(entityList.querySelectorAll("input[type='checkbox']:checked"), (checkbox) => checkbox.value));
+  state.entities.push({text: value, category: "custom"});
+  renderEntities(state.entities);
+  entityList.querySelectorAll("input[type='checkbox']").forEach((checkbox) => { checkbox.checked = previouslyChecked.has(checkbox.value); });
+  customEntityInput.value = "";
+  updateRedactButton();
+  setStatus("Text added. Check it in the review list if you approve permanent redaction.");
+}
+
+addEntityButton.addEventListener("click", addCustomEntity);
+customEntityInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") { event.preventDefault(); addCustomEntity(); }
 });
 
 redactButton.addEventListener("click", async () => {
@@ -301,3 +341,4 @@ async function initializeApplication() {
 }
 
 void initializeApplication();
+
