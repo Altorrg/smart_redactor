@@ -10,19 +10,9 @@ tools/tesseract/tesseract.exe
 tools/tesseract/tessdata/
 ```
 
-Place Poppler files in either supported layout:
-
-```text
-tools/poppler/Library/bin/pdfinfo.exe
-tools/poppler/Library/bin/pdftoppm.exe
-```
-
-or:
-
-```text
-tools/poppler/bin/pdfinfo.exe
-tools/poppler/bin/pdftoppm.exe
-```
+Poppler is no longer required. PyMuPDF performs bounded page rendering.
+Put `hun.traineddata` and `eng.traineddata` in `tools/tessdata` and retain
+the accompanying Apache-2.0 license. The reviewed test bundle includes them.
 
 The files must come from a source approved by the organization. The launcher
 does not download tools, modify `PATH`, write registry settings, or make
@@ -30,4 +20,6 @@ external network requests.
 
 Absolute locations outside the project can also be supplied without changing
 `PATH` by setting `PDF_REDACTOR_TESSERACT_PATH` to `tesseract.exe` and
-`PDF_REDACTOR_POPPLER_PATH` to the Poppler binary directory before launch.
+`PDF_REDACTOR_TESSDATA_PATH` to the language-model directory before launch.
+The default OCR language is `hun+eng`; use `PDF_REDACTOR_OCR_LANG` to change it.
+
