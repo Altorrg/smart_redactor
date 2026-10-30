@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import logging
 import os
 import socket
@@ -34,6 +35,32 @@ MAX_APPROVED_ENTITIES = 1_000
 MAX_ENTITY_LENGTH = 256
 
 LOGGER = logging.getLogger("pdf_smart_redactor")
+_ANALYZED_FILES: dict[str, str] = {}
+
+
+def _file_fingerprint(path: Path) -> str:
+    with path.open("rb") as stream:
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+        return digest.hexdigest()
+
+
+def _publish_without_overwrite(temporary_path: Path, source_path: Path) -> Path:
+    """Publish atomically without replacing the source or an earlier export."""
+    for number in range(1, 1001):
+        suffix = "" if number == 1 else f"_{number}"
+        output = source_path.with_name(f"{source_path.stem}_redacted{suffix}.pdf")
+        try:
+            if os.name == "nt":
+                os.rename(temporary_path, output)  # Windows refuses existing destinations.
+            else:
+                os.link(temporary_path, output)
+                temporary_path.unlink()
+            return output
+        except FileExistsError:
+            continue
+    raise ValueError("Too many existing exports. Choose another source folder.")
 
 
 class PathValidationError(ValueError):
@@ -148,7 +175,6 @@ def get_runtime_status() -> dict[str, object]:
     package_modules = {
         "PyMuPDF": "fitz",
         "pytesseract": "pytesseract",
-        "pdf2image": "pdf2image",
         "Pillow": "PIL",
     }
     missing_python_packages = [
@@ -218,8 +244,14 @@ def analyze_pdf(filepath: str) -> list[SensitiveEntity]:
 
     try:
         pdf_path = _sanitize_pdf_path(filepath)
+        fingerprint = _file_fingerprint(pdf_path)
         redactor = _load_redactor()
         extracted_text, extraction_mode = redactor.extract_text_for_analysis(pdf_path)
+        if _file_fingerprint(pdf_path) != fingerprint:
+            raise ValueError("The source PDF changed during analysis. Analyze it again.")
+        if len(_ANALYZED_FILES) >= 16:
+            _ANALYZED_FILES.pop(next(iter(_ANALYZED_FILES)))
+        _ANALYZED_FILES[str(pdf_path)] = fingerprint
         LOGGER.info("PDF analysis completed using %s extraction.", extraction_mode)
         return find_sensitive_entities(extracted_text)
     except (PathValidationError, ValueError) as error:
@@ -227,7 +259,7 @@ def analyze_pdf(filepath: str) -> list[SensitiveEntity]:
     except Exception as error:
         LOGGER.exception("Local PDF analysis failed: %s", type(error).__name__)
         raise RuntimeError(
-            "PDF analysis failed. Verify that the PDF, Tesseract, and Poppler are available."
+            "PDF analysis failed. Verify the PDF and local Tesseract language data."
         ) from None
 
 
@@ -239,6 +271,9 @@ def redact_pdf(filepath: str, approved_entities_list: list[str]) -> dict[str, ob
     try:
         pdf_path = _sanitize_pdf_path(filepath)
         approved_entities = _sanitize_approved_entities(approved_entities_list)
+        fingerprint = _file_fingerprint(pdf_path)
+        if _ANALYZED_FILES.get(str(pdf_path)) != fingerprint:
+            raise ValueError("Analyze this exact PDF again before approving redactions; the source is new or changed.")
         output_path = pdf_path.with_name(f"{pdf_path.stem}_redacted.pdf")
         temporary_path = _temporary_output_path(output_path)
         redactor = _load_redactor()
@@ -261,7 +296,9 @@ def redact_pdf(filepath: str, approved_entities_list: list[str]) -> dict[str, ob
         if redaction_count < 1:
             raise ValueError("None of the approved entities could be located in the PDF.")
 
-        os.replace(temporary_path, output_path)
+        if _file_fingerprint(pdf_path) != fingerprint:
+            raise ValueError("The source PDF changed during export. No output was published.")
+        output_path = _publish_without_overwrite(temporary_path, pdf_path)
         temporary_path = None
         LOGGER.info("Redacted PDF saved using %s processing.", processing_mode)
 
@@ -359,3 +396,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <title>PDF Smart Redactor GUI</title>
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <main class="app-shell">
@@ -48,6 +48,14 @@
       <div id="entity-list" class="entity-list" aria-live="polite">
         <p class="empty-state">No analysis results yet.</p>
       </div>
+      <div class="custom-row">
+        <label class="file-field" for="custom-entity">
+          <span class="file-label">Add text the detector missed</span>
+          <input id="custom-entity" type="text" maxlength="256" autocomplete="off" placeholder="Exact text from the PDF" disabled>
+        </label>
+        <button id="add-entity-button" class="button button-secondary" type="button" disabled>Add to review</button>
+      </div>
+      <p class="review-hint">Review every page. Adding text does not select it; check the values you approve. All matching occurrences are redacted.</p>
     </section>
 
     <section class="status-panel" aria-labelledby="status-heading">
@@ -76,7 +84,6 @@
         <li>PyMuPDF: GNU AGPL 3.0 or commercial MuPDF license</li>
         <li>Tesseract OCR: Apache License 2.0</li>
         <li>pytesseract: Apache License 2.0</li>
-        <li>pdf2image: MIT License</li>
         <li>Pillow: HPND License</li>
         <li>Eel: MIT License</li>
       </ul>
@@ -85,6 +92,7 @@
   </dialog>
 
   <script src="/eel.js"></script>
-  <script src="main.js?v=2"></script>
+  <script src="main.js?v=3"></script>
 </body>
 </html>
+

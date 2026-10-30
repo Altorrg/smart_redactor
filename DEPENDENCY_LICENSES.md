@@ -6,7 +6,7 @@ This file is an attribution and compliance summary. A distribution should also i
 
 ## PyMuPDF / MuPDF
 
-- Component used: PyMuPDF, imported as `fitz`, and its MuPDF engine.
+- Component used: PyMuPDF, imported as `pymupdf`, and its MuPDF engine.
 - License: GNU Affero General Public License version 3.0 (AGPL-3.0), or a separately purchased commercial MuPDF license from Artifex.
 - Copyright holder: Artifex Software, Inc. and PyMuPDF contributors, as identified by the distributed package.
 - Attribution and distribution requirements: Preserve copyright and license notices, include the complete AGPL-3.0 text, identify modifications, provide the corresponding source code for the covered work under AGPL-3.0, and provide the required installation information when applicable. Users interacting with a modified covered work over a network must be offered the corresponding source as required by AGPL section 13.
@@ -26,7 +26,7 @@ This file is an attribution and compliance summary. A distribution should also i
 - Copyright holder: pytesseract authors and contributors, as identified by the distributed package.
 - Attribution and distribution requirements: Include a copy of the Apache License 2.0, preserve copyright, patent, trademark, and attribution notices, state significant modifications, and include any upstream `NOTICE` file supplied with the distributed release.
 
-## pdf2image
+## pdf2image (historical dependency, removed in the reviewed repair)
 
 - Component used: `pdf2image`, used to render PDF pages through a local Poppler installation.
 - License: MIT License.
@@ -55,3 +55,4 @@ This file is an attribution and compliance summary. A distribution should also i
 3. Provide source code and installation information required by AGPL-3.0, or obtain an appropriate commercial MuPDF license.
 4. Review licenses for transitive and system dependencies, including Poppler and any bundled OCR language data.
 5. Keep the in-application third-party license link visible and keep this file with every binary and source distribution.
+
